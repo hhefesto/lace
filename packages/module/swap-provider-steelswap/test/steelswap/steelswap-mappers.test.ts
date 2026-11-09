@@ -209,5 +209,51 @@ describe('steelswap-mappers', () => {
       expect(result.code).toBe('UNKNOWN');
       expect(result.message).toBe('string error');
     });
+
+    it('extracts a string detail from the API error body', () => {
+      const result = toSwapProviderError(
+        new Error('SteelSwap API error (406): {"detail":"No route found"}'),
+      );
+      expect(result.message).toBe('No route found');
+    });
+
+    // https://github.com/input-output-hk/lace/issues/2277
+    it('turns a validation error detail list into a string', () => {
+      const body = JSON.stringify({
+        detail: [
+          {
+            type: 'value_error',
+            loc: ['body', 'quantity'],
+            msg: 'Value error, amount must be a positive number',
+            input: 0,
+            ctx: { error: {} },
+          },
+          {
+            type: 'missing',
+            loc: ['body', 'address'],
+            msg: 'Field required',
+          },
+        ],
+      });
+      const result = toSwapProviderError(
+        new Error(`SteelSwap API error (422): ${body}`),
+      );
+      expect(result.code).toBe('PROVIDER_UNAVAILABLE');
+      expect(result.message).toBe(
+        'Value error, amount must be a positive number; Field required',
+      );
+    });
+
+    it.each([
+      ['an empty list', '{"detail":[]}'],
+      ['a list without messages', '{"detail":[{"type":"value_error"}]}'],
+      ['an object', '{"detail":{"reason":"bad"}}'],
+      ['a number', '{"detail":42}'],
+      ['no detail', '{"error":"bad"}'],
+    ])('keeps the whole message when detail is %s', (_, body) => {
+      const message = `SteelSwap API error (422): ${body}`;
+      const result = toSwapProviderError(new Error(message));
+      expect(result.message).toBe(message);
+    });
   });
 });

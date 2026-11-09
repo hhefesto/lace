@@ -184,15 +184,35 @@ export const fromTokenSummary = (
 export const fromDexList = (dexNames: string[]): SwapDex[] =>
   dexNames.map(name => ({ id: name, name }));
 
+// `detail` is a string for most errors, but request validation errors (422)
+// send FastAPI/pydantic's list instead:
+//   {"detail":[{"type":"value_error","loc":["body","quantity"],"msg":"..."}]}
+// Returns undefined when `detail` has no usable text.
+const detailToText = (detail: unknown): string | undefined => {
+  if (typeof detail === 'string') return detail || undefined;
+  if (!Array.isArray(detail)) return undefined;
+  const messages = detail.flatMap((item: unknown) => {
+    if (typeof item === 'string') return [item];
+    if (typeof item === 'object' && item !== null && 'msg' in item) {
+      const { msg } = item;
+      return typeof msg === 'string' ? [msg] : [];
+    }
+    return [];
+  });
+  return messages.length > 0 ? messages.join('; ') : undefined;
+};
+
+// Always returns a string: the message ends up in a toast subtitle, which is
+// persisted and passed to i18next's t(), and t() throws on non-string keys.
 const extractDetailFromErrorMessage = (message: string): string => {
   // SteelSwap returns errors like: 'SteelSwap API error (406): {"detail":"..."}'
   const jsonStart = message.indexOf('{');
   if (jsonStart === -1) return message;
   try {
     const parsed = JSON.parse(message.slice(jsonStart)) as {
-      detail?: string;
-    };
-    return parsed.detail ?? message;
+      detail?: unknown;
+    } | null;
+    return detailToText(parsed?.detail) ?? message;
   } catch {
     return message;
   }

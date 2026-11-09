@@ -50,12 +50,15 @@ export const GlobalToast = ({ toast, onHide }: GlobalToastProps) => {
   // Translate text/subtitle so side effects can dispatch translation keys.
   // Uses defaultValue fallback so pre-translated strings and raw provider
   // error messages pass through unchanged.
-  const translatedText = toast?.text
-    ? t(toast.text, { defaultValue: toast.text })
-    : toast?.text;
-  const translatedSubtitle = toast?.subtitle
-    ? t(toast.subtitle, { defaultValue: toast.subtitle })
-    : toast?.subtitle;
+  // The toast is rehydrated from persisted state, so check the type at runtime:
+  // t() throws on a non-string key, and a throw here would crash every render
+  // and keep the hide timer below from ever clearing the toast.
+  const translate = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    return value ? t(value, { defaultValue: value }) : value;
+  };
+  const translatedText = translate(toast?.text);
+  const translatedSubtitle = translate(toast?.subtitle);
   const duration = useMemo(() => toast?.duration || 3, [toast?.duration]);
   const position = useMemo(() => toast?.position || 'top', [toast?.position]);
   const triggerToast = useTriggerToast({ duration, position });
@@ -118,7 +121,7 @@ export const GlobalToast = ({ toast, onHide }: GlobalToastProps) => {
     <FloatingOverlay onTouchThrough={onHide}>
       <Animated.View style={triggerToast.animatedStyle} pointerEvents="none">
         <Toast
-          text={translatedText ?? toast.text}
+          text={translatedText ?? ''}
           subtitle={translatedSubtitle}
           color={toast.color}
           backgroundType={toast.backgroundType}
